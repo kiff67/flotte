@@ -12,6 +12,7 @@ function todayISO() {
 interface DraftState {
   date_intervention: string;
   heures_moteur: string;
+  duree_heures: string;
   description: string;
   pieces: InterventionPart[];
 }
@@ -29,6 +30,7 @@ export function InterventionForm() {
   const [effectiveBoatId, setEffectiveBoatId] = useState<string | undefined>(boatId);
   const [date, setDate] = useState(todayISO());
   const [heures, setHeures] = useState("");
+  const [duree, setDuree] = useState("");
   const [description, setDescription] = useState("");
   const [pieces, setPieces] = useState<InterventionPart[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,6 +44,7 @@ export function InterventionForm() {
         setEffectiveBoatId(intervention.boat_id);
         setDate(intervention.date_intervention.slice(0, 10));
         setHeures(String(intervention.heures_moteur));
+        setDuree(String(intervention.duree_heures));
         setDescription(intervention.description);
         setPieces(intervention.pieces.map((p) => ({ ...p })));
         const b = await api.get<Boat>(`/boats/${intervention.boat_id}`);
@@ -54,6 +57,7 @@ export function InterventionForm() {
           const draft: DraftState = JSON.parse(draftRaw);
           setDate(draft.date_intervention);
           setHeures(draft.heures_moteur);
+          setDuree(draft.duree_heures ?? "");
           setDescription(draft.description);
           setPieces(draft.pieces);
         } else {
@@ -67,9 +71,9 @@ export function InterventionForm() {
 
   useEffect(() => {
     if (editing || !boatId || loading) return;
-    const draft: DraftState = { date_intervention: date, heures_moteur: heures, description, pieces };
+    const draft: DraftState = { date_intervention: date, heures_moteur: heures, duree_heures: duree, description, pieces };
     localStorage.setItem(draftKey(boatId), JSON.stringify(draft));
-  }, [date, heures, description, pieces, boatId, editing, loading]);
+  }, [date, heures, duree, description, pieces, boatId, editing, loading]);
 
   function addPiece() {
     setPieces((prev) => [...prev, { nom: "", quantite: 1 }]);
@@ -92,6 +96,11 @@ export function InterventionForm() {
       setError("Merci d'indiquer un nombre d'heures moteur valide");
       return;
     }
+    const dureeNum = Number(duree);
+    if (Number.isNaN(dureeNum) || dureeNum < 0) {
+      setError("Merci d'indiquer une durée d'intervention valide");
+      return;
+    }
     if (!description.trim()) {
       setError("Merci de décrire l'intervention");
       return;
@@ -111,6 +120,7 @@ export function InterventionForm() {
         boat_id: effectiveBoatId,
         date_intervention: date,
         heures_moteur: heuresNum,
+        duree_heures: dureeNum,
         description: description.trim(),
         pieces: validPieces,
       };
@@ -165,6 +175,21 @@ export function InterventionForm() {
               min="0"
               value={heures}
               onChange={(e) => setHeures(e.target.value)}
+              required
+            />
+          </div>
+
+          <div className="field">
+            <label>Durée de l'intervention (heures)</label>
+            <input
+              className="input"
+              type="number"
+              inputMode="decimal"
+              step="0.25"
+              min="0"
+              placeholder="Ex : 1.5"
+              value={duree}
+              onChange={(e) => setDuree(e.target.value)}
               required
             />
           </div>

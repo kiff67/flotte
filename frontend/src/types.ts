@@ -36,6 +36,7 @@ export interface Intervention {
   technician_name: string;
   date_intervention: string;
   heures_moteur: number;
+  duree_heures: number;
   description: string;
   statut: InterventionStatus;
   valeur: number | null;

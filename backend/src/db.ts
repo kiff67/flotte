@@ -138,6 +138,7 @@ BEGIN
     technician_id NVARCHAR(36) NOT NULL REFERENCES dbo.users(id),
     date_intervention DATE NOT NULL,
     heures_moteur FLOAT NOT NULL,
+    duree_heures FLOAT NULL,
     description NVARCHAR(MAX) NOT NULL,
     statut NVARCHAR(20) NOT NULL DEFAULT 'en_attente' CHECK (statut IN ('en_attente', 'validee', 'rejetee')),
     valeur FLOAT NULL,
@@ -160,6 +161,10 @@ BEGIN
     prix_unitaire FLOAT NULL
   );
 END
+
+-- Migration : ajoute la colonne durée si la table existait déjà avant son introduction.
+IF COL_LENGTH('dbo.interventions', 'duree_heures') IS NULL
+  ALTER TABLE dbo.interventions ADD duree_heures FLOAT NULL;
 
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_interventions_boat')
   CREATE INDEX idx_interventions_boat ON dbo.interventions(boat_id);

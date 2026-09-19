@@ -3,9 +3,9 @@
 Application web mobile (installable sur téléphone/tablette) pour la gestion de la maintenance
 d'une flotte de bateaux de location.
 
-- **Techniciens** : saisissent chaque intervention (date, heures moteur, description, pièces
-  utilisées) directement depuis leur mobile ou tablette, avec autocomplétion sur les descriptions
-  et les pièces déjà utilisées pour aller plus vite.
+- **Techniciens** : saisissent chaque intervention (date, heures moteur, durée de l'intervention,
+  description, pièces utilisées) directement depuis leur mobile ou tablette, avec autocomplétion
+  sur les descriptions et les pièces déjà utilisées pour aller plus vite.
 - **Gérant (admin)** : consulte les interventions en attente, les valide et saisit leur
   valorisation (montant).
 
@@ -92,10 +92,10 @@ navigateur proposera "Ajouter à l'écran d'accueil" pour l'installer comme une 
 ### Côté technicien
 1. Se connecter avec son compte technicien.
 2. Choisir le bateau concerné dans la liste (recherche rapide).
-3. Renseigner la date, les heures moteur, la description de l'intervention (des suggestions
-   apparaissent au fur et à mesure de la saisie, basées sur les interventions précédentes) et les
-   pièces utilisées (autocomplétion également, avec reprise automatique de la référence et du prix
-   par défaut si déjà connus).
+3. Renseigner la date, les heures moteur, la durée de l'intervention, la description (des
+   suggestions apparaissent au fur et à mesure de la saisie, basées sur les interventions
+   précédentes) et les pièces utilisées (autocomplétion également, avec reprise automatique de la
+   référence et du prix par défaut si déjà connus).
 4. Envoyer : l'intervention passe en statut "En attente" de validation.
 5. Dans "Historique", le technicien peut suivre le statut de ses interventions et modifier celles
    encore en attente.

@@ -29,7 +29,8 @@ export function MesInterventions() {
                 <div>
                   <div className="boat-name">{i.boat_name}</div>
                   <div className="muted">
-                    {new Date(i.date_intervention).toLocaleDateString("fr-FR")} · {i.heures_moteur} h
+                    {new Date(i.date_intervention).toLocaleDateString("fr-FR")} · {i.heures_moteur} h moteur ·{" "}
+                    {i.duree_heures} h de travail
                   </div>
                   <div className="muted truncate">{i.description}</div>
                 </div>

@@ -20,6 +20,7 @@ const interventionSchema = z.object({
   boat_id: z.string().min(1),
   date_intervention: z.string().min(1),
   heures_moteur: z.number().nonnegative(),
+  duree_heures: z.number().nonnegative(),
   description: z.string().min(1),
   pieces: z.array(partSchema).default([]),
 });
@@ -170,14 +171,15 @@ interventionsRouter.post(
     await withTransaction(async (tx) => {
       await txQuery(
         tx,
-        `INSERT INTO dbo.interventions (id, boat_id, technician_id, date_intervention, heures_moteur, description, statut)
-         VALUES (@id, @boat_id, @technician_id, @date_intervention, @heures_moteur, @description, 'en_attente')`,
+        `INSERT INTO dbo.interventions (id, boat_id, technician_id, date_intervention, heures_moteur, duree_heures, description, statut)
+         VALUES (@id, @boat_id, @technician_id, @date_intervention, @heures_moteur, @duree_heures, @description, 'en_attente')`,
         {
           id,
           boat_id: d.boat_id,
           technician_id: req.user!.id,
           date_intervention: d.date_intervention,
           heures_moteur: d.heures_moteur,
+          duree_heures: d.duree_heures,
           description: d.description.trim(),
         }
       );
@@ -245,6 +247,11 @@ interventionsRouter.patch(
       if (d.heures_moteur !== undefined)
         await txQuery(tx, "UPDATE dbo.interventions SET heures_moteur = @heures_moteur WHERE id = @id", {
           heures_moteur: d.heures_moteur,
+          id: req.params.id,
+        });
+      if (d.duree_heures !== undefined)
+        await txQuery(tx, "UPDATE dbo.interventions SET duree_heures = @duree_heures WHERE id = @id", {
+          duree_heures: d.duree_heures,
           id: req.params.id,
         });
       if (d.description)

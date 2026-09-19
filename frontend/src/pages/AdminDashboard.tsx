@@ -48,7 +48,8 @@ export function AdminDashboard() {
                     {i.boat_name} <span className="muted">· {i.technician_name}</span>
                   </div>
                   <div className="muted">
-                    {new Date(i.date_intervention).toLocaleDateString("fr-FR")} · {i.heures_moteur} h
+                    {new Date(i.date_intervention).toLocaleDateString("fr-FR")} · {i.heures_moteur} h moteur ·{" "}
+                    {i.duree_heures} h de travail
                   </div>
                   <div className="muted truncate">{i.description}</div>
                 </div>

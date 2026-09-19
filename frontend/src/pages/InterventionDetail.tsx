@@ -113,6 +113,8 @@ export function InterventionDetail() {
           <dd>{new Date(intervention.date_intervention).toLocaleDateString("fr-FR")}</dd>
           <dt>Heures moteur</dt>
           <dd>{intervention.heures_moteur} h</dd>
+          <dt>Durée</dt>
+          <dd>{intervention.duree_heures} h</dd>
           <dt>Technicien</dt>
           <dd>{intervention.technician_name}</dd>
           <dt>Description</dt>
