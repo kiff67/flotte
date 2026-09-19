@@ -60,6 +60,30 @@ serveur Windows) via des variables d'environnement — aucune base n'est embarqu
 
 Le backend crée automatiquement les tables nécessaires au premier démarrage (`IF OBJECT_ID(...) IS NULL CREATE TABLE ...`) — pas de script de migration séparé à lancer.
 
+### Problème fréquent : instance nommée (SQL Server Express)
+
+Si votre serveur est installé en instance nommée (souvent `NOMPC\SQLEXPRESS` avec SQL Server
+Express) et que vous mettez `DB_SERVER=NOMPC\SQLEXPRESS`, vous obtiendrez au démarrage une erreur
+du type :
+
+```
+ConnectionError: Port for SQLEXPRESS not found in NOMPC
+code: 'EINSTLOOKUP'
+```
+
+En cause : dès qu'un nom d'instance est détecté, le pilote ignore `DB_PORT` et tente de résoder le
+port réel via le service **SQL Server Browser** (UDP 1434) — qui échoue si ce service n'est pas
+démarré ou si le port est bloqué par le pare-feu. Deux solutions :
+
+- **Recommandé — port TCP fixe, sans nom d'instance** : dans *SQL Server Configuration Manager* →
+  `Protocols for SQLEXPRESS` → `TCP/IP` → onglet `IP Addresses` → section `IPAll` : videz
+  `TCP Dynamic Ports` et mettez `TCP Port` à une valeur fixe (ex. `1433`), puis redémarrez le
+  service `SQL Server (SQLEXPRESS)`. Configurez ensuite `DB_SERVER=NOMPC` (**sans** `\SQLEXPRESS`)
+  et `DB_PORT=1433`.
+- **Alternative — garder le nom d'instance** : démarrez le service Windows **SQL Server Browser**
+  (`services.msc`, démarrage Automatique) et autorisez le port **UDP 1434** dans le pare-feu
+  Windows. `DB_SERVER=NOMPC\SQLEXPRESS` fonctionnera alors (`DB_PORT` sera ignoré, sans problème).
+
 ## Démarrage rapide
 
 ### 1. Backend
