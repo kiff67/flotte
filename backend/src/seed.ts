@@ -1,3 +1,4 @@
+import "./env.js";
 import bcrypt from "bcryptjs";
 import { v4 as uuid } from "uuid";
 import { closePool, initSchema, query } from "./db.js";

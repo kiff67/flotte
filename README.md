@@ -40,8 +40,9 @@ serveur Windows) via des variables d'environnement — aucune base n'est embarqu
 2. Vérifiez que le port TCP de SQL Server (1433 par défaut) est ouvert dans le pare-feu Windows
    pour la machine qui exécutera l'API, et que le protocole TCP/IP est activé dans
    "SQL Server Configuration Manager".
-3. Configurez le backend avec ces variables d'environnement (fichier `backend/.env` ou variables
-   système) :
+3. Configurez le backend en copiant `backend/.env.example` en `backend/.env` puis en renseignant
+   ces variables (ce fichier est chargé automatiquement au démarrage, il n'y a rien d'autre à
+   faire) :
 
    | Variable | Description | Défaut |
    |---|---|---|
@@ -53,6 +54,10 @@ serveur Windows) via des variables d'environnement — aucune base n'est embarqu
    | `DB_ENCRYPT` | Chiffrer la connexion (`true`/`false`) | `true` |
    | `DB_TRUST_SERVER_CERTIFICATE` | Accepter le certificat auto-signé du serveur (`true`/`false`) | `true` |
 
+   ⚠️ **Si une valeur contient un `#`** (fréquent dans un mot de passe), encadrez-la de guillemets
+   dans `.env` (`DB_PASSWORD="Mot#DePasse123"`), sinon tout ce qui suit le `#` est silencieusement
+   coupé (traité comme un commentaire).
+
 Le backend crée automatiquement les tables nécessaires au premier démarrage (`IF OBJECT_ID(...) IS NULL CREATE TABLE ...`) — pas de script de migration séparé à lancer.
 
 ## Démarrage rapide
@@ -62,7 +67,7 @@ Le backend crée automatiquement les tables nécessaires au premier démarrage (
 ```bash
 cd backend
 npm install
-export DB_SERVER=... DB_NAME=FlotteMaintenance DB_USER=flotte_app DB_PASSWORD=...
+cp .env.example .env   # puis éditez .env avec vos identifiants SQL Server
 npm run seed   # crée les tables + 31 bateaux + un compte admin et un compte technicien de démo
 npm run dev    # démarre l'API sur http://localhost:4000
 ```
