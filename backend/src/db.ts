@@ -1,81 +1,179 @@
-import Database from "better-sqlite3";
-import path from "node:path";
-import { fileURLToPath } from "node:url";
+import sql from "mssql";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const DB_PATH = process.env.DB_PATH ?? path.join(__dirname, "..", "data", "flotte.db");
+const config: sql.config = {
+  server: process.env.DB_SERVER ?? "localhost",
+  port: process.env.DB_PORT ? Number(process.env.DB_PORT) : 1433,
+  database: process.env.DB_NAME ?? "FlotteMaintenance",
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  options: {
+    encrypt: process.env.DB_ENCRYPT !== "false",
+    trustServerCertificate: process.env.DB_TRUST_SERVER_CERTIFICATE !== "false",
+  },
+  pool: { max: 10, min: 0, idleTimeoutMillis: 30000 },
+};
 
-import fs from "node:fs";
-fs.mkdirSync(path.dirname(DB_PATH), { recursive: true });
+let poolPromise: Promise<sql.ConnectionPool> | null = null;
 
-export const db = new Database(DB_PATH);
-db.pragma("journal_mode = WAL");
-db.pragma("foreign_keys = ON");
+export function getPool(): Promise<sql.ConnectionPool> {
+  if (!poolPromise) {
+    poolPromise = new sql.ConnectionPool(config).connect().catch((err) => {
+      poolPromise = null;
+      throw err;
+    });
+  }
+  return poolPromise;
+}
 
-db.exec(`
-CREATE TABLE IF NOT EXISTS users (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  email TEXT NOT NULL UNIQUE,
-  password_hash TEXT NOT NULL,
-  role TEXT NOT NULL CHECK (role IN ('technicien', 'admin')),
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
+export async function closePool() {
+  if (poolPromise) {
+    const pool = await poolPromise;
+    await pool.close();
+    poolPromise = null;
+  }
+}
 
-CREATE TABLE IF NOT EXISTS boats (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  model TEXT,
-  immatriculation TEXT,
-  port_attache TEXT,
-  heures_moteur_actuelles REAL DEFAULT 0,
-  actif INTEGER NOT NULL DEFAULT 1,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
+export async function query<T = Record<string, unknown>>(
+  text: string,
+  params: Record<string, unknown> = {}
+): Promise<T[]> {
+  const pool = await getPool();
+  const request = pool.request();
+  for (const [key, value] of Object.entries(params)) {
+    request.input(key, value ?? null);
+  }
+  const result = await request.query<T>(text);
+  return result.recordset;
+}
 
-CREATE TABLE IF NOT EXISTS parts_catalog (
-  id TEXT PRIMARY KEY,
-  nom TEXT NOT NULL UNIQUE,
-  reference TEXT,
-  prix_unitaire_defaut REAL,
-  usage_count INTEGER NOT NULL DEFAULT 0,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
+export function txRequest(transaction: sql.Transaction): sql.Request {
+  return new sql.Request(transaction);
+}
 
-CREATE TABLE IF NOT EXISTS description_catalog (
-  id TEXT PRIMARY KEY,
-  texte TEXT NOT NULL UNIQUE,
-  usage_count INTEGER NOT NULL DEFAULT 0,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
+export async function txQuery<T = Record<string, unknown>>(
+  transaction: sql.Transaction,
+  text: string,
+  params: Record<string, unknown> = {}
+): Promise<T[]> {
+  const request = txRequest(transaction);
+  for (const [key, value] of Object.entries(params)) {
+    request.input(key, value ?? null);
+  }
+  const result = await request.query<T>(text);
+  return result.recordset;
+}
 
-CREATE TABLE IF NOT EXISTS interventions (
-  id TEXT PRIMARY KEY,
-  boat_id TEXT NOT NULL REFERENCES boats(id),
-  technician_id TEXT NOT NULL REFERENCES users(id),
-  date_intervention TEXT NOT NULL,
-  heures_moteur REAL NOT NULL,
-  description TEXT NOT NULL,
-  statut TEXT NOT NULL DEFAULT 'en_attente' CHECK (statut IN ('en_attente', 'validee', 'rejetee')),
-  valeur REAL,
-  commentaire_validation TEXT,
-  validated_by TEXT REFERENCES users(id),
-  validated_at TEXT,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-);
+export async function withTransaction<T>(fn: (tx: sql.Transaction) => Promise<T>): Promise<T> {
+  const pool = await getPool();
+  const transaction = new sql.Transaction(pool);
+  await transaction.begin();
+  try {
+    const result = await fn(transaction);
+    await transaction.commit();
+    return result;
+  } catch (err) {
+    await transaction.rollback();
+    throw err;
+  }
+}
 
-CREATE TABLE IF NOT EXISTS intervention_parts (
-  id TEXT PRIMARY KEY,
-  intervention_id TEXT NOT NULL REFERENCES interventions(id) ON DELETE CASCADE,
-  nom TEXT NOT NULL,
-  reference TEXT,
-  quantite REAL NOT NULL DEFAULT 1,
-  prix_unitaire REAL
-);
+const SCHEMA = `
+IF OBJECT_ID('dbo.users', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.users (
+    id NVARCHAR(36) NOT NULL PRIMARY KEY,
+    name NVARCHAR(200) NOT NULL,
+    email NVARCHAR(320) NOT NULL,
+    password_hash NVARCHAR(200) NOT NULL,
+    role NVARCHAR(20) NOT NULL CHECK (role IN ('technicien', 'admin')),
+    created_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+    CONSTRAINT UQ_users_email UNIQUE (email)
+  );
+END
 
-CREATE INDEX IF NOT EXISTS idx_interventions_boat ON interventions(boat_id);
-CREATE INDEX IF NOT EXISTS idx_interventions_statut ON interventions(statut);
-CREATE INDEX IF NOT EXISTS idx_interventions_technician ON interventions(technician_id);
-CREATE INDEX IF NOT EXISTS idx_intervention_parts_intervention ON intervention_parts(intervention_id);
-`);
+IF OBJECT_ID('dbo.boats', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.boats (
+    id NVARCHAR(36) NOT NULL PRIMARY KEY,
+    name NVARCHAR(200) NOT NULL,
+    model NVARCHAR(200) NULL,
+    immatriculation NVARCHAR(100) NULL,
+    port_attache NVARCHAR(200) NULL,
+    heures_moteur_actuelles FLOAT NOT NULL DEFAULT 0,
+    actif BIT NOT NULL DEFAULT 1,
+    created_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+  );
+END
+
+IF OBJECT_ID('dbo.parts_catalog', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.parts_catalog (
+    id NVARCHAR(36) NOT NULL PRIMARY KEY,
+    nom NVARCHAR(300) NOT NULL,
+    reference NVARCHAR(200) NULL,
+    prix_unitaire_defaut FLOAT NULL,
+    usage_count INT NOT NULL DEFAULT 0,
+    created_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+    CONSTRAINT UQ_parts_catalog_nom UNIQUE (nom)
+  );
+END
+
+-- NVARCHAR(MAX) ne peut pas porter de contrainte UNIQUE (limite d'index à 900 octets) :
+-- l'unicité des descriptions est garantie par l'application (lecture puis écriture).
+IF OBJECT_ID('dbo.description_catalog', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.description_catalog (
+    id NVARCHAR(36) NOT NULL PRIMARY KEY,
+    texte NVARCHAR(MAX) NOT NULL,
+    usage_count INT NOT NULL DEFAULT 0,
+    created_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+  );
+END
+
+IF OBJECT_ID('dbo.interventions', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.interventions (
+    id NVARCHAR(36) NOT NULL PRIMARY KEY,
+    boat_id NVARCHAR(36) NOT NULL REFERENCES dbo.boats(id),
+    technician_id NVARCHAR(36) NOT NULL REFERENCES dbo.users(id),
+    date_intervention DATE NOT NULL,
+    heures_moteur FLOAT NOT NULL,
+    description NVARCHAR(MAX) NOT NULL,
+    statut NVARCHAR(20) NOT NULL DEFAULT 'en_attente' CHECK (statut IN ('en_attente', 'validee', 'rejetee')),
+    valeur FLOAT NULL,
+    commentaire_validation NVARCHAR(MAX) NULL,
+    validated_by NVARCHAR(36) NULL REFERENCES dbo.users(id),
+    validated_at DATETIME2 NULL,
+    created_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME(),
+    updated_at DATETIME2 NOT NULL DEFAULT SYSUTCDATETIME()
+  );
+END
+
+IF OBJECT_ID('dbo.intervention_parts', 'U') IS NULL
+BEGIN
+  CREATE TABLE dbo.intervention_parts (
+    id NVARCHAR(36) NOT NULL PRIMARY KEY,
+    intervention_id NVARCHAR(36) NOT NULL REFERENCES dbo.interventions(id) ON DELETE CASCADE,
+    nom NVARCHAR(300) NOT NULL,
+    reference NVARCHAR(200) NULL,
+    quantite FLOAT NOT NULL DEFAULT 1,
+    prix_unitaire FLOAT NULL
+  );
+END
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_interventions_boat')
+  CREATE INDEX idx_interventions_boat ON dbo.interventions(boat_id);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_interventions_statut')
+  CREATE INDEX idx_interventions_statut ON dbo.interventions(statut);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_interventions_technician')
+  CREATE INDEX idx_interventions_technician ON dbo.interventions(technician_id);
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'idx_intervention_parts_intervention')
+  CREATE INDEX idx_intervention_parts_intervention ON dbo.intervention_parts(intervention_id);
+`;
+
+export async function initSchema() {
+  const pool = await getPool();
+  await pool.request().batch(SCHEMA);
+}
+
+export { sql };

@@ -12,9 +12,48 @@ d'une flotte de bateaux de location.
 ## Architecture
 
 ```
-backend/    API REST Node.js + Express + TypeScript + SQLite (better-sqlite3)
+backend/    API REST Node.js + Express + TypeScript + SQL Server (mssql/tedious)
 frontend/   PWA React + TypeScript + Vite (installable sur mobile, mobile-first)
 ```
+
+## Base de données : SQL Server
+
+Le backend se connecte à un serveur **SQL Server** existant (par exemple celui installé sur votre
+serveur Windows) via des variables d'environnement — aucune base n'est embarquée dans l'application.
+
+1. Sur le serveur SQL Server, créez une base dédiée (ex. `FlotteMaintenance`) et un login SQL
+   dédié à l'application avec les droits `db_owner` sur cette base (recommandé plutôt que
+   d'utiliser `sa`) :
+   ```sql
+   CREATE DATABASE FlotteMaintenance;
+   GO
+   CREATE LOGIN flotte_app WITH PASSWORD = 'ChoisirUnMotDePasseFort!';
+   GO
+   USE FlotteMaintenance;
+   CREATE USER flotte_app FOR LOGIN flotte_app;
+   ALTER ROLE db_owner ADD MEMBER flotte_app;
+   GO
+   ```
+   Cela suppose que le serveur est en **mode d'authentification mixte** (SQL Server + Windows). Si
+   seule l'authentification Windows est activée, activez le mode mixte dans SQL Server Management
+   Studio (Propriétés du serveur → Sécurité) puis redémarrez le service.
+2. Vérifiez que le port TCP de SQL Server (1433 par défaut) est ouvert dans le pare-feu Windows
+   pour la machine qui exécutera l'API, et que le protocole TCP/IP est activé dans
+   "SQL Server Configuration Manager".
+3. Configurez le backend avec ces variables d'environnement (fichier `backend/.env` ou variables
+   système) :
+
+   | Variable | Description | Défaut |
+   |---|---|---|
+   | `DB_SERVER` | Adresse ou nom du serveur SQL Server | `localhost` |
+   | `DB_PORT` | Port TCP | `1433` |
+   | `DB_NAME` | Nom de la base | `FlotteMaintenance` |
+   | `DB_USER` | Login SQL | — |
+   | `DB_PASSWORD` | Mot de passe du login | — |
+   | `DB_ENCRYPT` | Chiffrer la connexion (`true`/`false`) | `true` |
+   | `DB_TRUST_SERVER_CERTIFICATE` | Accepter le certificat auto-signé du serveur (`true`/`false`) | `true` |
+
+Le backend crée automatiquement les tables nécessaires au premier démarrage (`IF OBJECT_ID(...) IS NULL CREATE TABLE ...`) — pas de script de migration séparé à lancer.
 
 ## Démarrage rapide
 
@@ -23,7 +62,8 @@ frontend/   PWA React + TypeScript + Vite (installable sur mobile, mobile-first)
 ```bash
 cd backend
 npm install
-npm run seed   # crée 31 bateaux + un compte admin et un compte technicien de démo
+export DB_SERVER=... DB_NAME=FlotteMaintenance DB_USER=flotte_app DB_PASSWORD=...
+npm run seed   # crée les tables + 31 bateaux + un compte admin et un compte technicien de démo
 npm run dev    # démarre l'API sur http://localhost:4000
 ```
 
@@ -73,9 +113,12 @@ navigateur proposera "Ajouter à l'écran d'accueil" pour l'installer comme une 
 
 ## Choix techniques
 
-- **SQLite (better-sqlite3)** : suffisant pour une flotte de 31 bateaux et le volume
-  d'interventions associé, sans dépendance à un serveur de base de données externe. Le fichier
-  de base est dans `backend/data/flotte.db` (à sauvegarder régulièrement).
+- **SQL Server** : connexion via le pilote officiel `mssql` (tedious) à votre instance existante,
+  au lieu d'embarquer une base dédiée à l'application — pratique pour s'intégrer aux sauvegardes
+  et à l'infrastructure déjà en place sur votre serveur Windows. L'authentification utilisée est
+  un login SQL Server dédié (voir section ci-dessus) plutôt que l'authentification Windows
+  intégrée : c'est la pratique recommandée pour un compte de service applicatif, et cela évite les
+  complications de Kerberos si l'API n'est pas hébergée sur une machine du même domaine Windows.
 - **PWA (Progressive Web App)** : l'application est installable sur l'écran d'accueil comme une
   app mobile, sans passer par les stores. L'app fonctionne dans un navigateur mobile/tablette ;
   la connexion réseau reste nécessaire pour enregistrer les interventions (un brouillon de saisie
@@ -97,7 +140,10 @@ navigateur proposera "Ajouter à l'écran d'accueil" pour l'installer comme une 
 ## Déploiement en production
 
 - Définir `JWT_SECRET` (backend) avec une valeur secrète forte.
+- Définir les variables `DB_*` pointant vers le SQL Server de production (voir section
+  "Base de données : SQL Server").
 - Construire le frontend (`npm run build` dans `frontend/`) et servir le dossier `dist/` derrière
   un serveur web (ou héberger l'API et le frontend sur la même origine pour éviter la config CORS).
-- Construire le backend (`npm run build` puis `npm start`) et s'assurer que `backend/data/`
-  est sur un volume persistant et sauvegardé.
+- Construire le backend (`npm run build` puis `npm start`).
+- Les sauvegardes de la base restent gérées comme le reste de votre SQL Server (plan de
+  maintenance / sauvegardes déjà en place sur le serveur Windows).

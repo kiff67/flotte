@@ -40,7 +40,7 @@ export function InterventionForm() {
       if (editing && id) {
         const intervention = await api.get<Intervention>(`/interventions/${id}`);
         setEffectiveBoatId(intervention.boat_id);
-        setDate(intervention.date_intervention);
+        setDate(intervention.date_intervention.slice(0, 10));
         setHeures(String(intervention.heures_moteur));
         setDescription(intervention.description);
         setPieces(intervention.pieces.map((p) => ({ ...p })));
