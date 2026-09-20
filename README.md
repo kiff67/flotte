@@ -301,7 +301,9 @@ resynchronisation de Plesk. Préférez la fonctionnalité **Node.js intégrée �
    - Version de Node.js : la plus récente disponible (20+).
    - Racine du document : `httpdocs`
    - Racine de l'application : `backend`
-   - Fichier de démarrage : `dist/index.js`
+   - Fichier de démarrage : `app.js` (fichier fourni dans le dépôt, qui se contente de démarrer
+     `dist/index.js` une fois celui-ci construit — Plesk/iisnode attend par convention un fichier
+     nommé exactement `app.js` à la racine de l'application)
 4. **Build** : bouton "NPM Install" de Plesk (backend puis frontend), puis `npm run build` dans
    chaque dossier (via SSH/RDP si Plesk ne propose pas de bouton dédié pour le build).
 5. **Variables d'environnement** : renseignez `DB_SERVER`, `DB_PORT`, `DB_NAME`, `DB_USER`,
