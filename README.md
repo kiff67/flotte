@@ -286,3 +286,39 @@ place initialement.
 Les sauvegardes de la base restent gérées comme le reste de votre SQL Server (plan de maintenance
 déjà en place sur le serveur Windows) — aucune procédure supplémentaire n'est nécessaire côté
 application.
+
+### Déploiement sur un serveur Windows géré par Plesk (avec IIS)
+
+Si le serveur est administré via **Plesk** (reconnaissable à une arborescence du type
+`D:\Plesk\Vhosts\<domaine>\httpdocs\...`), Plesk gère lui-même la configuration IIS en coulisses :
+modifier IIS directement (sites, bindings, `web.config`) risque d'être écrasé à la prochaine
+resynchronisation de Plesk. Préférez la fonctionnalité **Node.js intégrée à Plesk** :
+
+1. **Créez un sous-domaine dédié** (pour ne pas toucher au site déjà servi sur le domaine racine),
+   ex. `flotte.votredomaine.fr`, depuis Plesk → domaine → `Sous-domaines`.
+2. **Déposez le code** (`backend/` et `frontend/`) dans le `httpdocs` de ce sous-domaine.
+3. **Activez Node.js** pour ce sous-domaine (icône "Node.js" dans son tableau de bord Plesk) :
+   - Version de Node.js : la plus récente disponible (20+).
+   - Racine du document : `httpdocs`
+   - Racine de l'application : `backend`
+   - Fichier de démarrage : `dist/index.js`
+4. **Build** : bouton "NPM Install" de Plesk (backend puis frontend), puis `npm run build` dans
+   chaque dossier (via SSH/RDP si Plesk ne propose pas de bouton dédié pour le build).
+5. **Variables d'environnement** : renseignez `DB_SERVER`, `DB_PORT`, `DB_NAME`, `DB_USER`,
+   `DB_PASSWORD`, `DB_ENCRYPT`, `JWT_SECRET` dans la section "Variables d'environnement
+   personnalisées" de la page Node.js de Plesk (remplace le fichier `.env` dans ce mode de
+   déploiement).
+6. **Démarrez** via "Enable Node.js" / "Restart App" — Plesk supervise le processus (redémarrage
+   automatique en cas de crash ou de redémarrage du serveur).
+7. **HTTPS** : onglet "SSL/TLS Certificates" du sous-domaine → "Get free certificate" (Let's
+   Encrypt, géré et renouvelé automatiquement par Plesk).
+8. **DNS** : si le sous-domaine est nouveau, vérifiez qu'un enregistrement A/CNAME pointe vers
+   l'IP de ce serveur.
+
+**Si Plesk n'a pas de section "Node.js"** (extension non installée) : solution de repli avec IIS
+en reverse proxy — faire tourner le backend comme service Windows (voir section précédente, via
+NSSM), installer les modules IIS **Application Request Routing (ARR)** et **URL Rewrite**, activer
+le proxy ARR au niveau serveur, créer un site IIS lié à votre sous-domaine, et ajouter une règle de
+réécriture redirigeant tout le trafic vers `http://localhost:<PORT>/{R:1}`. Plus de configuration
+manuelle et plus de risque de conflit avec Plesk — à réserver au cas où l'option native n'est
+vraiment pas disponible.
