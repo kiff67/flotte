@@ -189,11 +189,100 @@ navigateur proposera "Ajouter à l'écran d'accueil" pour l'installer comme une 
 
 ## Déploiement en production
 
-- Définir `JWT_SECRET` (backend) avec une valeur secrète forte.
-- Définir les variables `DB_*` pointant vers le SQL Server de production (voir section
-  "Base de données : SQL Server").
-- Construire le frontend (`npm run build` dans `frontend/`) et servir le dossier `dist/` derrière
-  un serveur web (ou héberger l'API et le frontend sur la même origine pour éviter la config CORS).
-- Construire le backend (`npm run build` puis `npm start`).
-- Les sauvegardes de la base restent gérées comme le reste de votre SQL Server (plan de
-  maintenance / sauvegardes déjà en place sur le serveur Windows).
+L'API backend sert aussi automatiquement le frontend une fois celui-ci construit : un seul
+processus Node, un seul port à exposer, pas de configuration CORS à gérer.
+
+### 1. Préparer le build
+
+```bash
+cd frontend
+npm install
+npm run build          # génère frontend/dist
+
+cd ../backend
+npm install
+npm run build           # génère backend/dist
+```
+
+### 2. Configurer `.env` en production
+
+Dans `backend/.env` (voir `.env.example`) :
+- `DB_*` pointant vers votre SQL Server (voir section "Base de données : SQL Server" et le
+  dépannage ci-dessous si besoin).
+- `JWT_SECRET` : une valeur longue et aléatoire, différente de celle de développement.
+- `PORT` : le port sur lequel l'appli écoutera (ex. `4000`).
+
+### 3. Lancer et initialiser
+
+```bash
+cd backend
+npm run seed    # une seule fois, crée les tables et les comptes
+npm start        # démarre l'API + le frontend sur http://<machine>:4000
+```
+
+À ce stade, l'application est accessible sur le réseau local via `http://<ip-de-la-machine>:4000`.
+Changez le mot de passe du compte admin dès que possible (voir section "Évolutions possibles"
+pour le self-service, en attendant recréez le compte depuis l'espace "Comptes").
+
+### 4. Garder l'appli démarrée en permanence (Windows)
+
+Un simple `npm start` s'arrête si vous fermez la fenêtre ou si le PC redémarre. Pour un usage en
+production, faites-en un **service Windows** avec [NSSM](https://nssm.cc/) (gratuit) :
+
+```powershell
+nssm install FlotteMaintenance "C:\Program Files\nodejs\node.exe" "D:\Project VStudio\flotte\backend\dist\index.js"
+nssm set FlotteMaintenance AppDirectory "D:\Project VStudio\flotte\backend"
+nssm start FlotteMaintenance
+```
+
+Le service démarre alors automatiquement avec Windows et redémarre si l'appli plante.
+
+### 5. Rendre l'appli accessible depuis n'importe où (4G/5G, autres sites)
+
+Comme la base de données reste sur votre réseau local, la solution la plus simple et la moins
+coûteuse est d'exposer l'appli via un **tunnel Cloudflare** (gratuit), sur la même machine que
+l'étape 4 :
+
+1. Créez un compte [Cloudflare](https://dash.cloudflare.com/sign-up) (gratuit) et si possible
+   ajoutez-y un nom de domaine (ex. `flotte-navigfrance.fr`, quelques euros/an chez n'importe quel
+   registrar, ou utilisez un sous-domaine que vous avez déjà).
+2. Installez `cloudflared` sur la machine qui fait tourner le backend :
+   ```powershell
+   winget install --id Cloudflare.cloudflared
+   ```
+3. Authentifiez-vous et créez le tunnel :
+   ```powershell
+   cloudflared tunnel login
+   cloudflared tunnel create flotte
+   cloudflared tunnel route dns flotte flotte.votredomaine.fr
+   ```
+4. Créez `C:\Users\<vous>\.cloudflared\config.yml` :
+   ```yaml
+   tunnel: flotte
+   credentials-file: C:\Users\<vous>\.cloudflared\<tunnel-id>.json
+   ingress:
+     - hostname: flotte.votredomaine.fr
+       service: http://localhost:4000
+     - service: http_status:404
+   ```
+5. Installez le tunnel comme service Windows (même logique qu'à l'étape 4) :
+   ```powershell
+   cloudflared service install
+   ```
+
+Vos techniciens et vous accédez alors à `https://flotte.votredomaine.fr` depuis n'importe où — HTTPS
+géré automatiquement par Cloudflare, sans ouvrir le moindre port sur votre box/pare-feu, sans
+exposer votre IP publique.
+
+**Limite à connaître** : cette solution dépend de la machine qui héberge l'appli et de votre
+connexion internet restant allumées. Si vous avez besoin d'une disponibilité plus robuste
+(indépendante de votre bureau), l'alternative est de migrer le backend et la base
+`FlotteMaintenance` vers un hébergement cloud (ex. un petit VPS + Azure SQL Database) — une
+évolution possible plus tard sans tout reconstruire, mais plus coûteuse et plus longue à mettre en
+place initialement.
+
+### Sauvegardes
+
+Les sauvegardes de la base restent gérées comme le reste de votre SQL Server (plan de maintenance
+déjà en place sur le serveur Windows) — aucune procédure supplémentaire n'est nécessaire côté
+application.
