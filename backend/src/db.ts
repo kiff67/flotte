@@ -20,6 +20,12 @@ const config: sql.config = {
   pool: { max: 10, min: 0, idleTimeoutMillis: 30000 },
 };
 
+console.log(
+  `[db] Connexion configurée : server=${config.server} port=${config.port} database=${config.database} ` +
+    `user=${config.user ?? "(non défini)"} encrypt=${config.options?.encrypt} ` +
+    `trustServerCertificate=${config.options?.trustServerCertificate}`
+);
+
 let poolPromise: Promise<sql.ConnectionPool> | null = null;
 
 export function getPool(): Promise<sql.ConnectionPool> {
