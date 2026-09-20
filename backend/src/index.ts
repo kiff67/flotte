@@ -48,9 +48,15 @@ async function main() {
     res.status(500).json({ error: "Erreur serveur" });
   });
 
-  const PORT = Number(process.env.PORT ?? 4000);
-  app.listen(PORT, () => {
-    console.log(`API flotte démarrée sur http://localhost:${PORT}`);
+  // Sous iisnode (Plesk/IIS), process.env.PORT n'est PAS un numéro de port TCP mais le chemin
+  // d'un named pipe Windows (ex. \\.\pipe\...) par lequel IIS communique avec ce process Node :
+  // il ne faut surtout pas le convertir en Number (ça donnerait NaN et app.listen() plante).
+  // On ne retombe sur le port numérique par défaut que si la variable n'est pas définie du tout.
+  const PORT: string | number = process.env.PORT ?? 4000;
+  const isNumericPort = /^\d+$/.test(String(PORT));
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- named pipe (string) ou port TCP (number)
+  app.listen(PORT as any, () => {
+    console.log(`API flotte démarrée sur ${isNumericPort ? `http://localhost:${PORT}` : PORT}`);
   });
 }
 
