@@ -296,7 +296,14 @@ resynchronisation de Plesk. Préférez la fonctionnalité **Node.js intégrée �
 
 1. **Créez un sous-domaine dédié** (pour ne pas toucher au site déjà servi sur le domaine racine),
    ex. `flotte.votredomaine.fr`, depuis Plesk → domaine → `Sous-domaines`.
-2. **Déposez le code** (`backend/` et `frontend/`) dans le `httpdocs` de ce sous-domaine.
+2. **Déposez le code** : mettez `backend/` dans le `httpdocs` de ce sous-domaine (ex.
+   `httpdocs/backend/`). **Important** : construisez le frontend (`npm run build` dans
+   `frontend/`) et copiez le **contenu** de `frontend/dist/` (pas le dossier lui-même)
+   **directement dans `httpdocs/`**, à côté de `backend/` — c'est-à-dire que `httpdocs/index.html`,
+   `httpdocs/assets/...`, `httpdocs/manifest.webmanifest` doivent exister directement. IIS sert
+   ainsi ces fichiers statiques nativement, sans passer par Node (plus rapide, et évite un piège
+   fréquent : si ces fichiers restent dans un sous-dossier séparé, IIS répond 404 sur les
+   `.js`/`.css` sans même interroger Node, ce qui donne une page blanche).
 3. **Activez Node.js** pour ce sous-domaine (icône "Node.js" dans son tableau de bord Plesk) :
    - Version de Node.js : la plus récente disponible (20+).
    - Racine du document : `httpdocs`
@@ -309,7 +316,9 @@ resynchronisation de Plesk. Préférez la fonctionnalité **Node.js intégrée �
 5. **Variables d'environnement** : renseignez `DB_SERVER`, `DB_PORT`, `DB_NAME`, `DB_USER`,
    `DB_PASSWORD`, `DB_ENCRYPT`, `JWT_SECRET` dans la section "Variables d'environnement
    personnalisées" de la page Node.js de Plesk (remplace le fichier `.env` dans ce mode de
-   déploiement).
+   déploiement). Ajoutez aussi `FRONTEND_DIST` pointant vers `httpdocs` (le chemin absolu complet,
+   ex. `D:\Plesk\Vhosts\votredomaine.com\httpdocs`), et **ne définissez pas `PORT`** (Plesk/iisnode
+   la fixe lui-même à un named pipe, pas à un port TCP).
 6. **Démarrez** via "Enable Node.js" / "Restart App" — Plesk supervise le processus (redémarrage
    automatique en cas de crash ou de redémarrage du serveur).
 7. **HTTPS** : onglet "SSL/TLS Certificates" du sous-domaine → "Get free certificate" (Let's

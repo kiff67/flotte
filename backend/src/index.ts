@@ -11,10 +11,16 @@ import { interventionsRouter } from "./routes/interventions.js";
 import { usersRouter } from "./routes/users.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+// Sous IIS/iisnode (Plesk), les fichiers statiques du frontend doivent en général être placés
+// directement dans la racine du document du site (httpdocs) pour qu'IIS les serve nativement,
+// sans repasser par Node — FRONTEND_DIST permet de pointer vers cet emplacement réel.
+// Par défaut (dev, ou déploiement où backend/ et frontend/ sont des dossiers frères) :
 // backend/src/index.ts (dev, via tsx) ou backend/dist/index.js (prod, compilé) sont tous les
 // deux à un niveau sous backend/ : dans les deux cas ../../frontend/dist pointe vers le build du
 // frontend à la racine du dépôt.
-const FRONTEND_DIST = path.resolve(__dirname, "../../frontend/dist");
+const FRONTEND_DIST = process.env.FRONTEND_DIST
+  ? path.resolve(process.env.FRONTEND_DIST)
+  : path.resolve(__dirname, "../../frontend/dist");
 
 async function main() {
   await initSchema();
