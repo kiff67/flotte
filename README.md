@@ -84,6 +84,27 @@ démarré ou si le port est bloqué par le pare-feu. Deux solutions :
   (`services.msc`, démarrage Automatique) et autorisez le port **UDP 1434** dans le pare-feu
   Windows. `DB_SERVER=NOMPC\SQLEXPRESS` fonctionnera alors (`DB_PORT` sera ignoré, sans problème).
 
+### Problème fréquent : erreur TLS ("unsupported protocol" / "ssl_choose_client_version")
+
+Une fois la connexion réseau établie, cette erreur peut apparaître :
+
+```
+ConnectionError: Failed to connect to ... - ssl_choose_client_version:unsupported protocol
+code: 'ESOCKET'
+```
+
+En cause : votre SQL Server (souvent une version assez ancienne fournie avec un logiciel tiers,
+type EBP) ne sait négocier que du TLS 1.0/1.1, que Node.js (OpenSSL 3) refuse par défaut. Deux
+solutions dans `backend/.env` :
+
+- **Recommandé sur un réseau interne** : `DB_ENCRYPT=false` — la connexion se fait alors sans
+  chiffrement TLS, ce qui évite complètement cette négociation. Acceptable pour un serveur qui
+  n'est pas exposé à internet ; à revoir si vous migrez un jour vers une version de SQL Server
+  plus récente.
+- **Si le serveur impose le chiffrement** ("Force Encryption" activé dans SQL Server Configuration
+  Manager) : `DB_MIN_TLS_VERSION=TLSv1` autorise Node.js à négocier une version de TLS plus
+  ancienne pour cette connexion.
+
 ## Démarrage rapide
 
 ### 1. Backend

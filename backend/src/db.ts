@@ -9,6 +9,13 @@ const config: sql.config = {
   options: {
     encrypt: process.env.DB_ENCRYPT !== "false",
     trustServerCertificate: process.env.DB_TRUST_SERVER_CERTIFICATE !== "false",
+    // Certains serveurs SQL Server anciens (souvent ceux fournis avec des logiciels tiers type
+    // EBP) ne savent négocier que du TLS 1.0/1.1, que Node.js/OpenSSL 3 refuse par défaut.
+    // DB_MIN_TLS_VERSION permet d'abaisser la version minimale acceptée si le chiffrement est
+    // imposé côté serveur (sinon, DB_ENCRYPT=false évite entièrement la négociation TLS).
+    ...(process.env.DB_MIN_TLS_VERSION
+      ? { cryptoCredentialsDetails: { minVersion: process.env.DB_MIN_TLS_VERSION as import("tls").SecureVersion } }
+      : {}),
   },
   pool: { max: 10, min: 0, idleTimeoutMillis: 30000 },
 };
