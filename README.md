@@ -292,44 +292,59 @@ application.
 Si le serveur est administré via **Plesk** (reconnaissable à une arborescence du type
 `D:\Plesk\Vhosts\<domaine>\httpdocs\...`), Plesk gère lui-même la configuration IIS en coulisses :
 modifier IIS directement (sites, bindings, `web.config`) risque d'être écrasé à la prochaine
-resynchronisation de Plesk. Préférez la fonctionnalité **Node.js intégrée à Plesk** :
+resynchronisation de Plesk. Utilisez la fonctionnalité **Node.js intégrée à Plesk**, avec
+**deux sous-domaines séparés** : un pour l'API (Node.js), un pour le frontend (site statique).
 
-1. **Créez un sous-domaine dédié** (pour ne pas toucher au site déjà servi sur le domaine racine),
-   ex. `flotte.votredomaine.fr`, depuis Plesk → domaine → `Sous-domaines`.
-2. **Déposez le code** : mettez `backend/` dans le `httpdocs` de ce sous-domaine (ex.
-   `httpdocs/backend/`). **Important** : construisez le frontend (`npm run build` dans
-   `frontend/`) et copiez le **contenu** de `frontend/dist/` (pas le dossier lui-même)
-   **directement dans `httpdocs/`**, à côté de `backend/` — c'est-à-dire que `httpdocs/index.html`,
-   `httpdocs/assets/...`, `httpdocs/manifest.webmanifest` doivent exister directement. IIS sert
-   ainsi ces fichiers statiques nativement, sans passer par Node (plus rapide, et évite un piège
-   fréquent : si ces fichiers restent dans un sous-dossier séparé, IIS répond 404 sur les
-   `.js`/`.css` sans même interroger Node, ce qui donne une page blanche).
-3. **Activez Node.js** pour ce sous-domaine (icône "Node.js" dans son tableau de bord Plesk) :
-   - Version de Node.js : la plus récente disponible (20+).
-   - Racine du document : `httpdocs`
-   - Racine de l'application : `backend`
-   - Fichier de démarrage : `app.js` (fichier fourni dans le dépôt, qui se contente de démarrer
-     `dist/index.js` une fois celui-ci construit — Plesk/iisnode attend par convention un fichier
-     nommé exactement `app.js` à la racine de l'application)
-4. **Build** : bouton "NPM Install" de Plesk (backend puis frontend), puis `npm run build` dans
-   chaque dossier (via SSH/RDP si Plesk ne propose pas de bouton dédié pour le build).
-5. **Variables d'environnement** : renseignez `DB_SERVER`, `DB_PORT`, `DB_NAME`, `DB_USER`,
-   `DB_PASSWORD`, `DB_ENCRYPT`, `JWT_SECRET` dans la section "Variables d'environnement
-   personnalisées" de la page Node.js de Plesk (remplace le fichier `.env` dans ce mode de
-   déploiement). Ajoutez aussi `FRONTEND_DIST` pointant vers `httpdocs` (le chemin absolu complet,
-   ex. `D:\Plesk\Vhosts\votredomaine.com\httpdocs`), et **ne définissez pas `PORT`** (Plesk/iisnode
-   la fixe lui-même à un named pipe, pas à un port TCP).
-6. **Démarrez** via "Enable Node.js" / "Restart App" — Plesk supervise le processus (redémarrage
-   automatique en cas de crash ou de redémarrage du serveur).
-7. **HTTPS** : onglet "SSL/TLS Certificates" du sous-domaine → "Get free certificate" (Let's
-   Encrypt, géré et renouvelé automatiquement par Plesk).
-8. **DNS** : si le sous-domaine est nouveau, vérifiez qu'un enregistrement A/CNAME pointe vers
-   l'IP de ce serveur.
+⚠️ **Ne mélangez jamais les fichiers du frontend (`index.html`, `assets/`...) dans le même
+dossier que le backend Node.** Sur certaines installations Plesk (utilisant Phusion Passenger
+plutôt qu'iisnode), la simple présence d'un `index.html` à la racine de l'application Node fait
+que le serveur cesse de transmettre les requêtes `/api/*` à Node — l'API entière se met à
+répondre 404, y compris après redémarrage complet. C'est pour ça que l'architecture ci-dessous
+sépare strictement les deux.
 
-**Si Plesk n'a pas de section "Node.js"** (extension non installée) : solution de repli avec IIS
-en reverse proxy — faire tourner le backend comme service Windows (voir section précédente, via
-NSSM), installer les modules IIS **Application Request Routing (ARR)** et **URL Rewrite**, activer
-le proxy ARR au niveau serveur, créer un site IIS lié à votre sous-domaine, et ajouter une règle de
-réécriture redirigeant tout le trafic vers `http://localhost:<PORT>/{R:1}`. Plus de configuration
-manuelle et plus de risque de conflit avec Plesk — à réserver au cas où l'option native n'est
-vraiment pas disponible.
+**1. Créez deux sous-domaines** depuis Plesk → domaine → `Sous-domaines` :
+   - `api.votredomaine.fr` → pour le backend (Node.js)
+   - `flotte.votredomaine.fr` → pour le frontend (site statique)
+
+**2. Backend — sous-domaine `api.votredomaine.fr`**
+   - Déposez **uniquement** le contenu de `backend/` dans son `httpdocs` (rien d'autre — pas de
+     fichiers du frontend ici).
+   - Activez Node.js (icône "Node.js" du sous-domaine) :
+     - Version de Node.js : la plus récente disponible (20+)
+     - Racine du document = Racine de l'application : `httpdocs`
+     - Fichier de démarrage : `app.js` (fourni dans le dépôt — démarre `dist/index.js` une fois
+       celui-ci construit)
+   - Build : bouton "NPM Install", puis `npm run build` (SSH/RDP si pas de bouton dédié).
+   - Variables d'environnement (section dédiée de la page Node.js, remplace `.env` dans ce mode) :
+     `DB_SERVER`, `DB_PORT`, `DB_NAME`, `DB_USER`, `DB_PASSWORD`, `DB_ENCRYPT`, `JWT_SECRET`.
+     **Ne définissez pas `PORT`** (le serveur d'application le fixe lui-même). Ne définissez pas
+     `FRONTEND_DIST` non plus : ce sous-domaine ne sert que l'API.
+   - Démarrez (Enable Node.js / Restart App), puis vérifiez `https://api.votredomaine.fr/api/health`
+     → doit répondre `{"ok":true}`.
+   - HTTPS : onglet "SSL/TLS Certificates" → "Get free certificate" (Let's Encrypt).
+
+**3. Frontend — sous-domaine `flotte.votredomaine.fr`**
+   - **N'activez PAS Node.js** pour ce sous-domaine — c'est un site purement statique.
+   - Construisez le frontend en ciblant l'API du sous-domaine précédent :
+     ```bash
+     cd frontend
+     VITE_API_BASE_URL=https://api.votredomaine.fr npm run build
+     ```
+   - Copiez le **contenu** de `frontend/dist/` (pas le dossier lui-même) directement dans le
+     `httpdocs` de ce sous-domaine — `index.html`, `assets/`, `manifest.webmanifest`, etc. doivent
+     être directement à la racine.
+   - HTTPS : même procédure (Let's Encrypt via Plesk).
+
+**4. DNS** : si les sous-domaines sont nouveaux, vérifiez qu'un enregistrement A/CNAME pointe vers
+   l'IP de ce serveur pour chacun.
+
+Vos utilisateurs accèdent à `https://flotte.votredomaine.fr`, qui appelle l'API sur
+`https://api.votredomaine.fr` (CORS déjà activé côté backend).
+
+**Si Plesk n'a pas de section "Node.js"** (extension non installée) pour le sous-domaine API :
+solution de repli avec IIS en reverse proxy — faire tourner le backend comme service Windows (voir
+section précédente, via NSSM), installer les modules IIS **Application Request Routing (ARR)** et
+**URL Rewrite**, activer le proxy ARR au niveau serveur, créer un site IIS lié au sous-domaine, et
+ajouter une règle de réécriture redirigeant tout le trafic vers `http://localhost:<PORT>/{R:1}`.
+Plus de configuration manuelle et plus de risque de conflit avec Plesk — à réserver au cas où
+l'option native n'est vraiment pas disponible.

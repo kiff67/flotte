@@ -1,5 +1,10 @@
 const TOKEN_KEY = "flotte_token";
 
+// URL de base de l'API. Vide par défaut (appels relatifs "/api/...", utile quand le frontend et
+// le backend sont servis depuis la même origine). En déploiement avec frontend et backend sur des
+// sous-domaines séparés, définir VITE_API_BASE_URL au moment du build (ex. "https://api.mondomaine.fr").
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/$/, "");
+
 export function getToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
 }
@@ -19,7 +24,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     ...(options.headers as Record<string, string> | undefined),
   };
 
-  const res = await fetch(`/api${path}`, { ...options, headers });
+  const res = await fetch(`${API_BASE_URL}/api${path}`, { ...options, headers });
 
   if (res.status === 204) return undefined as T;
 
